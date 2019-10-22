@@ -1,28 +1,39 @@
-import { AzureFunction, Context, HttpRequest } from "@azure/functions"
-import { CosmosClient } from "@azure/cosmos";
+import { AzureFunction, Context, HttpRequest } from "@azure/functions";
+import openGraphOperations from "../openGraphOperations";
+import { IProblemDetail } from "../Model/ProblemDetails";
 
-const endpoint: string = process.env.COSMOS_ENDPOINT;
-const key: string = process.env.COSMOS_KEY;
+const httpTrigger: AzureFunction = async function(
+  context: Context,
+  req: HttpRequest
+): Promise<void> {
+  const data = req.body;
 
-const client = new CosmosClient({ endpoint, key });
-
-const database = client.database("theurlist");
-const collection = database.container("linkBundles");
-
-const httpTrigger: AzureFunction = async function (context: Context, req: HttpRequest): Promise<void> {
-    const vanityUrl = req.params.vanityUrl;
-
-    const query = await collection.items.query(`
-        SELECT * 
-        FROM linkbundles lb 
-        WHERE LOWER(lb.vanityUrl) = LOWER(${vanityUrl})`
-    );
-
-    const links = await query.fetchAll();
+  try {
+    const ogResponse = await openGraphOperations.getOGResponse(data.url);
 
     context.res = {
-        body: links
+      body: ogResponse
     };
+  } catch (err) {
+    const problemDetail: IProblemDetail = {
+      title: "Could not validate links",
+      detail: err.message,
+      status: 400,
+      type: "/theurlist/clientissue",
+      instance: req.url
+    };
+
+    handleError(problemDetail, context);
+  }
 };
+
+function handleError(error: IProblemDetail, context: Context) {
+  // TODO: Log ERROR with AppInsights
+
+  context.res = {
+    body: error.detail,
+    status: error.status
+  };
+}
 
 export default httpTrigger;

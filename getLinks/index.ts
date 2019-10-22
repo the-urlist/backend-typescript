@@ -1,21 +1,23 @@
-import { AzureFunction, Context, HttpRequest } from "@azure/functions"
+import { AzureFunction, Context, HttpRequest } from "@azure/functions";
+import CosmosDBClient from "../CosmosDBClient";
 
-const httpTrigger: AzureFunction = async function (context: Context, req: HttpRequest): Promise<void> {
-    context.log('HTTP trigger function processed a request.');
-    const name = (req.query.name || (req.body && req.body.name));
+const httpTrigger: AzureFunction = async function(
+  context: Context,
+  req: HttpRequest
+): Promise<void> {
+  const cosmosClient = new CosmosDBClient();
+  const vanityUrl = req.params.vanityUrl || "";
 
-    if (name) {
-        context.res = {
-            // status: 200, /* Defaults to 200 */
-            body: "Hello " + (req.query.name || req.body.name)
-        };
-    }
-    else {
-        context.res = {
-            status: 400,
-            body: "Please pass a name on the query string or in the request body"
-        };
-    }
+  const query = await cosmosClient.container.items.query(`
+        SELECT * 
+        FROM linkbundles lb 
+        WHERE LOWER(lb.vanityUrl) = LOWER('${vanityUrl}')`);
+
+  const links = await query.fetchAll();
+
+  context.res = {
+    body: links.resources[0]
+  };
 };
 
 export default httpTrigger;
